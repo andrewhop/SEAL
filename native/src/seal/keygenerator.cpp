@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 #include <algorithm>
+#include <execution>
 #include "seal/keygenerator.h"
 #include "seal/randomtostd.h"
 #include "seal/util/common.h"
@@ -259,19 +260,23 @@ namespace seal
         // The max number of keys is equal to number of coefficients
         galois_keys.data().resize(coeff_count);
 
-        for (uint64_t galois_elt : galois_elts)
-        {
+      std::for_each(
+          std::execution::par_unseq,
+          galois_elts.begin(),
+          galois_elts.end(),
+          [coeff_count, coeff_mod_count, parms, galois_keys, coeff_count_power](auto&& galois_elt)
+          {
             // Verify coprime conditions.
             if (!(galois_elt & 1) ||
                 (galois_elt >= static_cast<uint64_t>(coeff_count) << 1))
             {
-                throw invalid_argument("Galois element is not valid");
+              throw invalid_argument("Galois element is not valid");
             }
 
             // Do we already have the key?
             if (galois_keys.has_key(galois_elt))
             {
-                continue;
+              continue;
             }
 
             // Rotate secret key for each coeff_modulus
@@ -279,11 +284,11 @@ namespace seal
                 allocate_poly(coeff_count, coeff_mod_count, pool_));
             for (size_t i = 0; i < coeff_mod_count; i++)
             {
-                apply_galois_ntt(
-                    secret_key_.data().data() + i * coeff_count,
-                    coeff_count_power,
-                    galois_elt,
-                    rotated_secret_key.get() + i * coeff_count);
+              apply_galois_ntt(
+                  secret_key_.data().data() + i * coeff_count,
+                  coeff_count_power,
+                  galois_elt,
+                  rotated_secret_key.get() + i * coeff_count);
             }
 
             // Initialize Galois key
@@ -295,7 +300,7 @@ namespace seal
             generate_one_kswitch_key(
                 rotated_secret_key.get(),
                 galois_keys.data()[index], save_seed);
-        }
+          });
 
         // Set the parms_id
         galois_keys.parms_id_ = context_data.parms_id();
